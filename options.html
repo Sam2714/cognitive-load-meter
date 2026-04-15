@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cognitive Load Meter Settings</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="options-body">
+    <main class="options-shell">
+      <header class="options-header">
+        <div class="options-brand">
+          <span class="options-brand-mark"></span>
+          <div class="options-brand-copy">
+            <span class="options-kicker">Cognitive Load Meter</span>
+            <span class="options-title">Local-first adaptive browsing settings</span>
+          </div>
+        </div>
+
+        <div class="options-header-actions">
+          <span class="options-pill">No page content leaves your device</span>
+        </div>
+      </header>
+
+      <section class="options-grid">
+        <article class="options-card">
+          <p class="section-kicker">Core Controls</p>
+          <h1 class="options-heading">Tune how the extension responds.</h1>
+          <p class="options-copy">
+            These controls affect only local heuristics and UI behavior. They do not change your browsing data scope.
+          </p>
+
+          <div class="toggle-row">
+            <div>
+              <p class="options-section-title">Tracking</p>
+              <p class="field-help">Enable or pause the extension globally.</p>
+            </div>
+            <button class="toggle-pill" id="trackingToggle" type="button">Tracking Off</button>
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <p class="options-section-title">Smart suggestions</p>
+              <p class="field-help">Allow soft intervention cards when your load is elevated.</p>
+            </div>
+            <button class="toggle-pill" id="suggestionsToggle" type="button">Enabled</button>
+          </div>
+        </article>
+
+        <article class="options-card">
+          <p class="section-kicker">Privacy</p>
+          <h2 class="options-section-title">What stays local</h2>
+          <p class="options-copy">
+            The extension stores only interaction summaries such as tab switching, scroll bursts, recovery time, and local settings.
+            It does not store page text, clipboard data, form fields, or browsing content.
+          </p>
+          <p class="options-summary-text">
+            This version intentionally avoids direct browser-side AI calls so the privacy model remains simple and robust.
+          </p>
+        </article>
+
+        <article class="options-card is-span-2">
+          <p class="section-kicker">Fine Tuning</p>
+          <div class="options-field-grid">
+            <label class="field-row" for="interventionThreshold">
+              <span class="field-label">Intervention threshold</span>
+              <input class="field-range" id="interventionThreshold" type="range" min="60" max="85" step="1" />
+              <span class="field-inline-value" id="interventionThresholdValue">70</span>
+              <span class="field-help">Higher values make the card appear less often.</span>
+            </label>
+
+            <label class="field-row" for="breakDurationSeconds">
+              <span class="field-label">Quick reset duration</span>
+              <input class="field-range" id="breakDurationSeconds" type="range" min="45" max="180" step="15" />
+              <span class="field-inline-value" id="breakDurationValue">60s</span>
+              <span class="field-help">Controls the guided pause timer in the page overlay.</span>
+            </label>
+
+            <label class="field-row" for="focusOverlayStrength">
+              <span class="field-label">Focus overlay strength</span>
+              <input class="field-range" id="focusOverlayStrength" type="range" min="12" max="40" step="1" />
+              <span class="field-inline-value" id="focusOverlayValue">24%</span>
+              <span class="field-help">Stronger overlays dim the surrounding page more aggressively.</span>
+            </label>
+
+            <label class="field-row" for="indicatorPosition">
+              <span class="field-label">Indicator position</span>
+              <select class="field-select" id="indicatorPosition">
+                <option value="bottom-right">Bottom right</option>
+                <option value="bottom-left">Bottom left</option>
+                <option value="top-right">Top right</option>
+                <option value="top-left">Top left</option>
+              </select>
+              <span class="field-help">Choose where the floating meter sits on the page.</span>
+            </label>
+          </div>
+        </article>
+
+        <article class="options-card is-span-2">
+          <p class="section-kicker">Today Snapshot</p>
+          <div class="options-summary-grid">
+            <div class="options-stat-card">
+              <span class="options-stat-label">Switches</span>
+              <strong class="options-stat-value" id="summarySwitches">0</strong>
+            </div>
+            <div class="options-stat-card">
+              <span class="options-stat-label">Scan Bursts</span>
+              <strong class="options-stat-value" id="summaryBursts">0</strong>
+            </div>
+            <div class="options-stat-card">
+              <span class="options-stat-label">Breaks</span>
+              <strong class="options-stat-value" id="summaryBreaks">0</strong>
+            </div>
+            <div class="options-stat-card">
+              <span class="options-stat-label">Focus Uses</span>
+              <strong class="options-stat-value" id="summaryFocusUses">0</strong>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="options-footer">
+        <div class="options-actions">
+          <button class="options-chip-button options-secondary-button" id="resetTodayButton" type="button">Reset Today</button>
+          <button class="options-chip-button options-secondary-button" id="reloadButton" type="button">Reload Snapshot</button>
+        </div>
+        <div class="options-actions">
+          <button class="options-chip-button options-secondary-button" id="openPopupButton" type="button">Open Popup</button>
+          <button class="options-chip-button options-save-button" id="saveSettingsButton" type="button">Save Settings</button>
+        </div>
+      </footer>
+    </main>
+
+    <div class="options-toast" id="toast" hidden>Settings saved</div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
