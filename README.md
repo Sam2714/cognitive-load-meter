@@ -46,3 +46,7 @@ A production-minded Chrome extension that detects likely cognitive overload from
 - All interaction analysis is processed locally.
 - No page content is collected or sent to any remote service.
 - The extension is designed as a product-quality local-first MVP with a stronger MV3-safe runtime model.
+
+## License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
