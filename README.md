@@ -6,6 +6,7 @@ A production-minded Chrome extension that detects likely cognitive overload from
 
 - Tracks tab switching, scroll intensity, and idle recovery locally
 - Computes a live cognitive load score from `0` to `100`
+- Learns which domains tend to feel heavier or calmer and adapts the score over time
 - Shows a floating in-page indicator with low, medium, and high states
 - Offers subtle interventions like quick reset guidance and focus mode
 - Includes a premium popup dashboard and a local-first settings page

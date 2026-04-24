@@ -17,6 +17,7 @@ const popupState = {
     trackingEnabled: false,
     interventionEligible: false,
     focusModeActive: false,
+    currentDomainProfile: null,
     recentScores: [],
     signalCounts: {
       switches10m: 0,
@@ -73,9 +74,23 @@ function scoreColor(status) {
   return "#22c55e";
 }
 
-function statusDescription(status, trackingEnabled) {
+function statusDescription(status, trackingEnabled, domainProfile) {
   if (!trackingEnabled) {
     return "Tracking is paused. Turn it back on whenever you want live guidance again.";
+  }
+
+  if (domainProfile?.confidence >= 60 && domainProfile.tendency === "heavy") {
+    if (status === "High") {
+      return `This site usually runs heavier for you, and your current interaction pattern is reinforcing that pressure.`;
+    }
+
+    if (status === "Medium") {
+      return `This site tends to be cognitively dense for you, so staying deliberate here should help keep the score stable.`;
+    }
+  }
+
+  if (domainProfile?.confidence >= 60 && domainProfile.tendency === "calm" && status === "Low") {
+    return "This site usually feels lighter for you than average, and your current browsing pattern matches that calmer baseline.";
   }
 
   if (status === "High") {
@@ -156,7 +171,8 @@ function renderHero() {
   elements.statusValue.textContent = popupState.live.status;
   elements.statusDescription.textContent = statusDescription(
     popupState.live.status,
-    popupState.settings.trackingEnabled
+    popupState.settings.trackingEnabled,
+    popupState.live.currentDomainProfile
   );
   elements.focusBadge.textContent = popupState.live.focusModeActive ? "Focus mode on" : "Focus mode off";
   elements.scoreRing.style.setProperty("--ring-progress", `${score * 3.6}deg`);
@@ -268,6 +284,7 @@ function renderPattern() {
 function buildInsights() {
   const summary = popupState.summary;
   const liveSignals = popupState.live.signalCounts || {};
+  const domainProfile = popupState.live.currentDomainProfile;
 
   if (!summary) {
     return [
@@ -292,6 +309,18 @@ function buildInsights() {
 
   if (recoverySignal > 0) {
     insights.push("Idle moments are helping your score recover between heavier bursts.");
+  }
+
+  if (domainProfile?.confidence >= 35 && domainProfile?.tendency === "heavy") {
+    insights.push(
+      `${domainProfile.label} has been a heavier-than-usual context for you, so interventions may appear a bit earlier there.`
+    );
+  }
+
+  if (domainProfile?.confidence >= 35 && domainProfile?.tendency === "calm") {
+    insights.push(
+      `${domainProfile.label} has been one of your calmer browsing contexts, which helps soften the score when your behavior stays steady.`
+    );
   }
 
   if (popupState.live.status === "High") {

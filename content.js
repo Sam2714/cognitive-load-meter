@@ -62,6 +62,7 @@
       trackingEnabled: false,
       interventionEligible: false,
       focusModeActive: false,
+      currentDomainProfile: null,
       signalCounts: {
         switches10m: 0,
         bursts5m: 0,
@@ -365,6 +366,10 @@
     state.suggestionVisible = false;
   }
 
+  function canDisplayIntervention() {
+    return Boolean(state.live.isPrimaryTab) && document.visibilityState === "visible";
+  }
+
   function startScrollSampling() {
     if (state.scrollListener) {
       return;
@@ -557,14 +562,27 @@
 
     const threshold = state.live.uiPreferences.interventionThreshold || 70;
     const needsFocus = state.live.signalCounts.bursts5m >= state.live.signalCounts.switches10m;
+    const domainProfile = state.live.currentDomainProfile;
 
     state.cardTitle.textContent = state.live.score >= threshold + 10 ? "Your pace is pretty dense" : "Take a lighter pace";
-    state.cardBody.textContent = needsFocus
-      ? "Rapid scanning is pushing your load up. A simpler reading view can help."
-      : "Context switching is stacking up. A brief reset may help you settle back in.";
-    state.cardSecondary.textContent = state.live.focusModeActive
-      ? "Focus mode is already on. A short break may be the fastest relief."
-      : "Try focus mode or a quick reset to lower the mental overhead.";
+
+    if (domainProfile?.confidence >= 60 && domainProfile.tendency === "heavy") {
+      state.cardBody.textContent = `${domainProfile.label} tends to run heavier for you, and your current pace suggests that pattern is active again.`;
+      state.cardSecondary.textContent = state.live.focusModeActive
+        ? "Focus mode is already on here. A short break may be the fastest relief."
+        : "Try focus mode or a quick reset to lower the site-specific friction.";
+    } else if (domainProfile?.confidence >= 60 && domainProfile.tendency === "calm") {
+      state.cardBody.textContent = `${domainProfile.label} is usually one of your calmer browsing spaces, so the current spike is more about pacing than the site itself.`;
+      state.cardSecondary.textContent = "A short reset may be enough to bring things back down quickly.";
+    } else {
+      state.cardBody.textContent = needsFocus
+        ? "Rapid scanning is pushing your load up. A simpler reading view can help."
+        : "Context switching is stacking up. A brief reset may help you settle back in.";
+      state.cardSecondary.textContent = state.live.focusModeActive
+        ? "Focus mode is already on. A short break may be the fastest relief."
+        : "Try focus mode or a quick reset to lower the mental overhead.";
+    }
+
     state.card.querySelector('[data-card-action="focus"]').textContent = state.live.focusModeActive
       ? "Turn off focus"
       : "Simplify content";
@@ -714,7 +732,11 @@
       removeFocusMode();
     }
 
-    if (state.live.interventionEligible && state.live.score >= state.live.uiPreferences.interventionThreshold) {
+    if (
+      canDisplayIntervention() &&
+      state.live.interventionEligible &&
+      state.live.score >= state.live.uiPreferences.interventionThreshold
+    ) {
       if (!state.suggestionVisible) {
         await chrome.runtime.sendMessage({ type: "INTERVENTION_SHOWN" }).catch(() => undefined);
         showSuggestion();
@@ -729,6 +751,23 @@
       handleLiveState(message.payload).catch((error) => {
         console.error("Cognitive Load Meter content update failed", error);
       });
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" && state.suggestionVisible && !state.breakOverlayVisible) {
+      hideSuggestion();
+      return;
+    }
+
+    if (document.visibilityState === "visible") {
+      chrome.runtime.sendMessage({ type: "GET_LIVE_STATE" }).then((payload) => {
+        if (payload) {
+          handleLiveState(payload).catch((error) => {
+            console.error("Cognitive Load Meter visibility refresh failed", error);
+          });
+        }
+      }).catch(() => undefined);
     }
   });
 

@@ -3,7 +3,8 @@
 const STORAGE_KEYS = {
   settings: "settings",
   todaySummary: "todaySummary",
-  rollingState: "rollingState"
+  rollingState: "rollingState",
+  domainProfiles: "domainProfiles"
 };
 
 const ALARM_NAME = "clm-maintenance";
@@ -93,6 +94,41 @@ function createPendingSummary() {
   };
 }
 
+function createDefaultDomainProfile(domain = "") {
+  return {
+    domain,
+    visits: 0,
+    tabSwitches: 0,
+    scrollBursts: 0,
+    directionFlips: 0,
+    recoveryMinutes: 0,
+    focusModeUses: 0,
+    breakSessions: 0,
+    interventionsShown: 0,
+    highEvents: 0,
+    scoreTotal: 0,
+    scoreSamples: 0,
+    lastSeenAt: 0
+  };
+}
+
+function createPendingDomainUpdate() {
+  return {
+    visits: 0,
+    tabSwitches: 0,
+    scrollBursts: 0,
+    directionFlips: 0,
+    recoveryMinutes: 0,
+    focusModeUses: 0,
+    breakSessions: 0,
+    interventionsShown: 0,
+    highEvents: 0,
+    scoreTotal: 0,
+    scoreSamples: 0,
+    lastSeenAt: 0
+  };
+}
+
 function createDefaultRollingState() {
   return {
     tabSwitchEvents: [],
@@ -102,6 +138,8 @@ function createDefaultRollingState() {
     currentScore: 0,
     currentStatus: "Low",
     activeTabId: null,
+    activeDomain: null,
+    activeDomainContext: null,
     lastTabSwitchAt: 0,
     lastInterventionAt: 0,
     suppressionUntil: 0,
@@ -113,7 +151,8 @@ function createDefaultRollingState() {
     lastSummaryWriteAt: 0,
     sessionStartedAt: Date.now(),
     debugOverride: null,
-    pendingSummary: createPendingSummary()
+    pendingSummary: createPendingSummary(),
+    pendingDomainUpdates: {}
   };
 }
 
@@ -149,6 +188,33 @@ function sanitizeSettings(settings) {
   return merged;
 }
 
+function normalizeDomain(domain) {
+  if (typeof domain !== "string") {
+    return null;
+  }
+
+  const trimmed = domain.trim().toLowerCase().replace(/^www\./, "");
+  return trimmed || null;
+}
+
+function domainFromUrl(url) {
+  if (typeof url !== "string" || !url) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url);
+
+    if (!/^https?:$/.test(parsed.protocol)) {
+      return null;
+    }
+
+    return normalizeDomain(parsed.hostname);
+  } catch (error) {
+    return null;
+  }
+}
+
 function normalizePendingSummary(summary) {
   return {
     tabSwitches: Number(summary?.tabSwitches || 0),
@@ -164,6 +230,78 @@ function normalizePendingSummary(summary) {
   };
 }
 
+function normalizeDomainProfile(domain, profile) {
+  const base = createDefaultDomainProfile(domain);
+
+  return {
+    ...base,
+    ...(profile || {}),
+    domain,
+    visits: Number(profile?.visits || 0),
+    tabSwitches: Number(profile?.tabSwitches || 0),
+    scrollBursts: Number(profile?.scrollBursts || 0),
+    directionFlips: Number(profile?.directionFlips || 0),
+    recoveryMinutes: Number(profile?.recoveryMinutes || 0),
+    focusModeUses: Number(profile?.focusModeUses || 0),
+    breakSessions: Number(profile?.breakSessions || 0),
+    interventionsShown: Number(profile?.interventionsShown || 0),
+    highEvents: Number(profile?.highEvents || 0),
+    scoreTotal: Number(profile?.scoreTotal || 0),
+    scoreSamples: Number(profile?.scoreSamples || 0),
+    lastSeenAt: Number(profile?.lastSeenAt || 0)
+  };
+}
+
+function normalizePendingDomainUpdates(updates) {
+  if (!updates || typeof updates !== "object") {
+    return {};
+  }
+
+  return Object.entries(updates).reduce((accumulator, [domain, update]) => {
+    const normalizedDomain = normalizeDomain(domain);
+
+    if (!normalizedDomain) {
+      return accumulator;
+    }
+
+    accumulator[normalizedDomain] = {
+      ...createPendingDomainUpdate(),
+      ...update,
+      visits: Number(update?.visits || 0),
+      tabSwitches: Number(update?.tabSwitches || 0),
+      scrollBursts: Number(update?.scrollBursts || 0),
+      directionFlips: Number(update?.directionFlips || 0),
+      recoveryMinutes: Number(update?.recoveryMinutes || 0),
+      focusModeUses: Number(update?.focusModeUses || 0),
+      breakSessions: Number(update?.breakSessions || 0),
+      interventionsShown: Number(update?.interventionsShown || 0),
+      highEvents: Number(update?.highEvents || 0),
+      scoreTotal: Number(update?.scoreTotal || 0),
+      scoreSamples: Number(update?.scoreSamples || 0),
+      lastSeenAt: Number(update?.lastSeenAt || 0)
+    };
+
+    return accumulator;
+  }, {});
+}
+
+function normalizeDomainProfiles(profiles) {
+  if (!profiles || typeof profiles !== "object") {
+    return {};
+  }
+
+  return Object.entries(profiles).reduce((accumulator, [domain, profile]) => {
+    const normalizedDomain = normalizeDomain(domain);
+
+    if (!normalizedDomain) {
+      return accumulator;
+    }
+
+    accumulator[normalizedDomain] = normalizeDomainProfile(normalizedDomain, profile);
+    return accumulator;
+  }, {});
+}
+
 function normalizeTodaySummary(summary) {
   const base = createDefaultTodaySummary(summary?.dateKey || getDateKey());
 
@@ -173,6 +311,30 @@ function normalizeTodaySummary(summary) {
     hourlyScores: normalizeArray(summary?.hourlyScores, 24, 0),
     hourlyHighEntries: normalizeArray(summary?.hourlyHighEntries, 24, 0),
     hourlySampleCounts: normalizeArray(summary?.hourlySampleCounts, 24, 0)
+  };
+}
+
+function sanitizeDomainContext(context) {
+  if (!context || typeof context !== "object") {
+    return null;
+  }
+
+  const domain = normalizeDomain(context.domain);
+
+  if (!domain) {
+    return null;
+  }
+
+  return {
+    domain,
+    label: typeof context.label === "string" ? context.label : domain,
+    averageScore: Number(context.averageScore || 0),
+    visits: Number(context.visits || 0),
+    highEvents: Number(context.highEvents || 0),
+    adjustment: Number(context.adjustment || 0),
+    tendency: typeof context.tendency === "string" ? context.tendency : "neutral",
+    confidence: Number(context.confidence || 0),
+    confidenceLabel: typeof context.confidenceLabel === "string" ? context.confidenceLabel : "light"
   };
 }
 
@@ -206,9 +368,118 @@ function normalizeRollingState(state) {
             score: clamp(Number(entry.score), 0, 100)
           }))
       : [],
+    activeDomain: normalizeDomain(state?.activeDomain),
+    activeDomainContext: sanitizeDomainContext(state?.activeDomainContext),
     focusModeTabs: typeof state?.focusModeTabs === "object" && state?.focusModeTabs ? state.focusModeTabs : {},
-    pendingSummary: normalizePendingSummary(state?.pendingSummary)
+    pendingSummary: normalizePendingSummary(state?.pendingSummary),
+    pendingDomainUpdates: normalizePendingDomainUpdates(state?.pendingDomainUpdates)
   };
+}
+
+function mergeDomainMetric(target, source) {
+  target.visits += Number(source?.visits || 0);
+  target.tabSwitches += Number(source?.tabSwitches || 0);
+  target.scrollBursts += Number(source?.scrollBursts || 0);
+  target.directionFlips += Number(source?.directionFlips || 0);
+  target.recoveryMinutes += Number(source?.recoveryMinutes || 0);
+  target.focusModeUses += Number(source?.focusModeUses || 0);
+  target.breakSessions += Number(source?.breakSessions || 0);
+  target.interventionsShown += Number(source?.interventionsShown || 0);
+  target.highEvents += Number(source?.highEvents || 0);
+  target.scoreTotal += Number(source?.scoreTotal || 0);
+  target.scoreSamples += Number(source?.scoreSamples || 0);
+  target.lastSeenAt = Math.max(Number(target.lastSeenAt || 0), Number(source?.lastSeenAt || 0));
+}
+
+function ensurePendingDomainUpdate(state, domain) {
+  const normalizedDomain = normalizeDomain(domain);
+
+  if (!normalizedDomain) {
+    return null;
+  }
+
+  if (!state.pendingDomainUpdates[normalizedDomain]) {
+    state.pendingDomainUpdates[normalizedDomain] = createPendingDomainUpdate();
+  }
+
+  return state.pendingDomainUpdates[normalizedDomain];
+}
+
+function recordPendingDomainMetric(state, domain, metrics) {
+  const pendingUpdate = ensurePendingDomainUpdate(state, domain);
+
+  if (!pendingUpdate) {
+    return;
+  }
+
+  mergeDomainMetric(pendingUpdate, metrics);
+}
+
+function buildMergedDomainProfile(domain, domainProfiles, pendingUpdates) {
+  const normalizedDomain = normalizeDomain(domain);
+
+  if (!normalizedDomain) {
+    return null;
+  }
+
+  const mergedProfile = normalizeDomainProfile(normalizedDomain, domainProfiles?.[normalizedDomain]);
+  mergeDomainMetric(mergedProfile, pendingUpdates?.[normalizedDomain]);
+  return mergedProfile;
+}
+
+function computeDomainContext(domain, domainProfiles, pendingUpdates) {
+  const mergedProfile = buildMergedDomainProfile(domain, domainProfiles, pendingUpdates);
+
+  if (!mergedProfile) {
+    return null;
+  }
+
+  const averageScore = mergedProfile.scoreSamples > 0 ? mergedProfile.scoreTotal / mergedProfile.scoreSamples : 0;
+  const evidencePoints = mergedProfile.visits + mergedProfile.scoreSamples * 0.5;
+  const confidence = clamp(evidencePoints / 10, 0, 1);
+  const highRate = mergedProfile.visits > 0 ? mergedProfile.highEvents / mergedProfile.visits : 0;
+  const burstRate = mergedProfile.visits > 0 ? mergedProfile.scrollBursts / mergedProfile.visits : 0;
+  const recoveryRate = mergedProfile.visits > 0 ? mergedProfile.recoveryMinutes / mergedProfile.visits : 0;
+  const adaptiveBase =
+    clamp((averageScore - 50) / 7, -4, 6) +
+    clamp(highRate * 8, 0, 6) +
+    clamp(burstRate * 1.5, 0, 3) -
+    clamp(recoveryRate * 0.7, 0, 4);
+  const adjustment = evidencePoints < 2 ? 0 : Math.round(clamp(adaptiveBase * confidence, -6, 10));
+
+  return {
+    domain: mergedProfile.domain,
+    label: mergedProfile.domain,
+    averageScore: Math.round(averageScore),
+    visits: mergedProfile.visits,
+    highEvents: mergedProfile.highEvents,
+    adjustment,
+    tendency: adjustment >= 3 ? "heavy" : adjustment <= -2 ? "calm" : "neutral",
+    confidence: Math.round(confidence * 100),
+    confidenceLabel: confidence >= 0.75 ? "strong" : confidence >= 0.35 ? "building" : "light"
+  };
+}
+
+function hasPendingDomainUpdates(updates) {
+  return Object.values(updates || {}).some((update) =>
+    Object.entries(update || {}).some(([key, value]) => key !== "lastSeenAt" && Number(value || 0) > 0)
+  );
+}
+
+function pruneDomainProfiles(profiles, limit = 60) {
+  const entries = Object.entries(profiles || {});
+
+  if (entries.length <= limit) {
+    return profiles;
+  }
+
+  return entries
+    .sort((left, right) => Number(right[1]?.lastSeenAt || 0) - Number(left[1]?.lastSeenAt || 0))
+    .slice(0, limit)
+    .reduce((accumulator, [domain, profile]) => {
+      accumulator[domain] = profile;
+      return accumulator;
+    }, {});
 }
 
 function countSignals(state) {
@@ -311,7 +582,7 @@ async function ensureInitialized() {
       await setSessionAccessLevel();
 
       const [localStore, sessionStore] = await Promise.all([
-        chrome.storage.local.get([STORAGE_KEYS.settings, STORAGE_KEYS.todaySummary]),
+        chrome.storage.local.get([STORAGE_KEYS.settings, STORAGE_KEYS.todaySummary, STORAGE_KEYS.domainProfiles]),
         chrome.storage.session.get(STORAGE_KEYS.rollingState)
       ]);
 
@@ -320,6 +591,7 @@ async function ensureInitialized() {
       const todayKey = getDateKey();
       const settings = sanitizeSettings(localStore[STORAGE_KEYS.settings]);
       const summary = normalizeTodaySummary(localStore[STORAGE_KEYS.todaySummary]);
+      const domainProfiles = normalizeDomainProfiles(localStore[STORAGE_KEYS.domainProfiles]);
       const rollingState = normalizeRollingState(sessionStore[STORAGE_KEYS.rollingState]);
 
       if (!localStore[STORAGE_KEYS.settings]) {
@@ -332,6 +604,10 @@ async function ensureInitialized() {
           ...rollingState,
           pendingSummary: createPendingSummary()
         };
+      }
+
+      if (!localStore[STORAGE_KEYS.domainProfiles]) {
+        localUpdates[STORAGE_KEYS.domainProfiles] = domainProfiles;
       }
 
       if (!sessionStore[STORAGE_KEYS.rollingState]) {
@@ -385,21 +661,89 @@ async function getRollingState() {
   return rollingState;
 }
 
+async function getDomainProfiles() {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.domainProfiles);
+  return normalizeDomainProfiles(result[STORAGE_KEYS.domainProfiles]);
+}
+
+async function getLastFocusedActiveTab() {
+  const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  return tabs[0] ?? null;
+}
+
 async function getActiveTabId() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tabs[0]?.id ?? null;
+  const tab = await getLastFocusedActiveTab();
+  return tab?.id ?? null;
+}
+
+async function resolveDomainForTab(tabId) {
+  if (typeof tabId !== "number") {
+    return null;
+  }
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return domainFromUrl(tab?.url);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function ensureActiveContext(state) {
+  const previousActiveTabId = state.activeTabId;
+  let activeTab = null;
+
+  if (typeof state.activeTabId === "number") {
+    try {
+      activeTab = await chrome.tabs.get(state.activeTabId);
+    } catch (error) {
+      activeTab = null;
+    }
+  }
+
+  if (!activeTab) {
+    activeTab = await getLastFocusedActiveTab();
+  }
+
+  const activeTabId = activeTab?.id ?? null;
+
+  if (!activeTabId) {
+    state.activeTabId = null;
+    state.activeDomain = null;
+    state.activeDomainContext = null;
+    return state;
+  }
+
+  if (activeTabId !== state.activeTabId) {
+    state.activeTabId = activeTabId;
+  }
+
+  const resolvedDomain = domainFromUrl(activeTab?.url);
+
+  if (activeTabId !== previousActiveTabId || resolvedDomain !== state.activeDomain) {
+    state.activeDomain = resolvedDomain;
+    state.activeDomainContext = null;
+  }
+
+  return state;
+}
+
+function syncActiveDomainContext(state, domainProfiles) {
+  state.activeDomainContext = computeDomainContext(state.activeDomain, domainProfiles, state.pendingDomainUpdates);
+  return state;
 }
 
 async function flushPendingSummary(state, options = {}) {
   const now = options.now || Date.now();
   const force = Boolean(options.force);
+  const domainProfiles = normalizeDomainProfiles(options.domainProfiles);
 
   if (!force && now - state.lastSummaryWriteAt < SUMMARY_FLUSH_INTERVAL_MS) {
     await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
     return;
   }
 
-  if (!hasPendingSummary(state.pendingSummary)) {
+  if (!hasPendingSummary(state.pendingSummary) && !hasPendingDomainUpdates(state.pendingDomainUpdates)) {
     state.lastSummaryWriteAt = now;
     await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
     return;
@@ -407,6 +751,7 @@ async function flushPendingSummary(state, options = {}) {
 
   const summary = await getTodaySummary();
   const pendingSummary = normalizePendingSummary(state.pendingSummary);
+  const nextDomainProfiles = domainProfiles && Object.keys(domainProfiles).length > 0 ? domainProfiles : await getDomainProfiles();
 
   summary.tabSwitches += pendingSummary.tabSwitches;
   summary.idleMinutes += pendingSummary.idleMinutes;
@@ -433,16 +778,26 @@ async function flushPendingSummary(state, options = {}) {
     summary.hourlyHighEntries[index] += pendingSummary.hourlyHighEntries[index];
   }
 
+  Object.entries(normalizePendingDomainUpdates(state.pendingDomainUpdates)).forEach(([domain, pendingUpdate]) => {
+    const profile = normalizeDomainProfile(domain, nextDomainProfiles[domain]);
+    mergeDomainMetric(profile, pendingUpdate);
+    nextDomainProfiles[domain] = profile;
+  });
+
   state.pendingSummary = createPendingSummary();
+  state.pendingDomainUpdates = {};
   state.lastSummaryWriteAt = now;
 
   await Promise.all([
-    chrome.storage.local.set({ [STORAGE_KEYS.todaySummary]: summary }),
+    chrome.storage.local.set({
+      [STORAGE_KEYS.todaySummary]: summary,
+      [STORAGE_KEYS.domainProfiles]: pruneDomainProfiles(nextDomainProfiles)
+    }),
     chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state })
   ]);
 }
 
-function computeScore(state) {
+function computeScore(state, domainContext) {
   if (state.debugOverride && Number.isFinite(state.debugOverride.score) && state.debugOverride.status) {
     return {
       score: clamp(Number(state.debugOverride.score), 0, 100),
@@ -454,7 +809,8 @@ function computeScore(state) {
   const tabPressure = Math.min(40, signals.switches10m * 5);
   const scrollPressure = Math.min(45, signals.bursts5m * 6 + signals.flips5m * 2);
   const idleRelief = Math.min(30, signals.idleMinutes10m * 4 + (state.currentIdleState !== "active" ? 10 : 0));
-  const rawScore = clamp(tabPressure + scrollPressure - idleRelief, 0, 100);
+  const domainPressure = Number(domainContext?.adjustment || 0);
+  const rawScore = clamp(tabPressure + scrollPressure + domainPressure - idleRelief, 0, 100);
   const score = Math.round(state.currentScore * 0.7 + rawScore * 0.3);
 
   return {
@@ -483,22 +839,44 @@ function isInterventionEligible(state, settings) {
   return true;
 }
 
-function buildLiveStatePayload(state, settings, tabId) {
-  const resolvedTabId = tabId ?? state.activeTabId;
+async function buildLiveStatePayload(state, settings, domainProfiles, tabReference) {
+  let tab = null;
+
+  if (typeof tabReference === "number") {
+    try {
+      tab = await chrome.tabs.get(tabReference);
+    } catch (error) {
+      tab = { id: tabReference };
+    }
+  } else if (tabReference && typeof tabReference === "object") {
+    tab = tabReference;
+  }
+
+  const resolvedTabId = typeof tab?.id === "number" ? tab.id : tabReference ?? state.activeTabId;
   const focusModeActive = Boolean(resolvedTabId && state.focusModeTabs[String(resolvedTabId)]);
   const trackingActive = isTrackingActive(settings, state);
+  const isPrimaryTab = typeof resolvedTabId === "number" && resolvedTabId === state.activeTabId;
+  const tabDomain = isPrimaryTab ? state.activeDomain : domainFromUrl(tab?.url);
+  const currentDomainProfile = !trackingActive
+    ? null
+    : isPrimaryTab
+      ? state.activeDomainContext
+      : computeDomainContext(tabDomain, domainProfiles, state.pendingDomainUpdates);
 
   return {
     score: trackingActive ? state.currentScore : 0,
     status: trackingActive ? state.currentStatus : "Low",
     trackingEnabled: trackingActive,
-    interventionEligible: isInterventionEligible(state, settings),
+    interventionEligible: isPrimaryTab && isInterventionEligible(state, settings),
     focusModeActive,
-    activeTabId: resolvedTabId,
+    isPrimaryTab,
+    activeTabId: state.activeTabId,
+    surfaceTabId: resolvedTabId,
     lastInterventionAt: state.lastInterventionAt,
     recentScores: state.recentScores,
     sessionStartedAt: state.sessionStartedAt,
     signalCounts: countSignals(state),
+    currentDomainProfile,
     uiPreferences: {
       suggestionsEnabled: settings.suggestionsEnabled,
       interventionThreshold: settings.interventionThreshold,
@@ -511,9 +889,13 @@ function buildLiveStatePayload(state, settings, tabId) {
 
 async function broadcastLiveState(preloaded) {
   const settings = preloaded?.settings || (await getSettings());
-  const state = preloaded?.state || (await getRollingState());
+  const domainProfiles = preloaded?.domainProfiles || (await getDomainProfiles());
+  const state = syncActiveDomainContext(
+    await ensureActiveContext(preloaded?.state || (await getRollingState())),
+    domainProfiles
+  );
   const activeTabId = state.activeTabId ?? (await getActiveTabId());
-  const activePayload = buildLiveStatePayload(state, settings, activeTabId);
+  const activePayload = await buildLiveStatePayload(state, settings, domainProfiles, activeTabId);
 
   if (activeTabId !== state.activeTabId) {
     state.activeTabId = activeTabId;
@@ -529,10 +911,10 @@ async function broadcastLiveState(preloaded) {
   await Promise.all(
     tabs
       .filter((tab) => typeof tab.id === "number")
-      .map((tab) =>
+      .map(async (tab) =>
         chrome.tabs.sendMessage(tab.id, {
           type: "LIVE_STATE_UPDATED",
-          payload: buildLiveStatePayload(state, settings, tab.id)
+          payload: await buildLiveStatePayload(state, settings, domainProfiles, tab)
         }).catch(() => undefined)
       )
   );
@@ -540,12 +922,19 @@ async function broadcastLiveState(preloaded) {
 
 async function getDashboardState(tabId) {
   await ensureInitialized();
-  const [settings, summary, state] = await Promise.all([getSettings(), getTodaySummary(), getRollingState()]);
+  const [settings, summary, initialState, domainProfiles] = await Promise.all([
+    getSettings(),
+    getTodaySummary(),
+    getRollingState(),
+    getDomainProfiles()
+  ]);
+  const state = syncActiveDomainContext(await ensureActiveContext(initialState), domainProfiles);
+  await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
 
   return {
     settings,
     summary,
-    live: buildLiveStatePayload(state, settings, tabId)
+    live: await buildLiveStatePayload(state, settings, domainProfiles, tabId)
   };
 }
 
@@ -553,8 +942,8 @@ async function recalculateState(options = {}) {
   await ensureInitialized();
 
   const now = options.now || Date.now();
-  const [settings, initialState] = await Promise.all([getSettings(), getRollingState()]);
-  const state = normalizeRollingState(initialState);
+  const [settings, initialState, domainProfiles] = await Promise.all([getSettings(), getRollingState(), getDomainProfiles()]);
+  const state = syncActiveDomainContext(await ensureActiveContext(normalizeRollingState(initialState)), domainProfiles);
   const previousStatus = state.currentStatus;
 
   trimRollingState(state, now);
@@ -565,7 +954,7 @@ async function recalculateState(options = {}) {
     state.suppressedWhileHigh = false;
     state.suppressionUntil = 0;
   } else {
-    const computed = computeScore(state);
+    const computed = computeScore(state, state.activeDomainContext);
     state.currentScore = computed.score;
     state.currentStatus = computed.status;
   }
@@ -577,9 +966,18 @@ async function recalculateState(options = {}) {
 
   if (shouldTrackScores(settings, state)) {
     addHourlyScoreSample(state.pendingSummary, state.currentScore, now);
+    recordPendingDomainMetric(state, state.activeDomain, {
+      scoreTotal: state.currentScore,
+      scoreSamples: 1,
+      lastSeenAt: now
+    });
 
     if (previousStatus !== "High" && state.currentStatus === "High") {
       addHourlyHighEntry(state.pendingSummary, now);
+      recordPendingDomainMetric(state, state.activeDomain, {
+        highEvents: 1,
+        lastSeenAt: now
+      });
     }
 
     sampleRecentScore(state, now, previousStatus, Boolean(options.forceSample));
@@ -587,10 +985,11 @@ async function recalculateState(options = {}) {
 
   await flushPendingSummary(state, {
     now,
+    domainProfiles,
     force: Boolean(options.forceFlush) || previousStatus !== state.currentStatus
   });
 
-  await broadcastLiveState({ settings, state });
+  await broadcastLiveState({ settings, state, domainProfiles });
   return {
     settings,
     state
@@ -607,11 +1006,13 @@ async function setTrackingEnabled(enabled) {
     settings.firstRunCompleted = true;
     await chrome.storage.local.set({ [STORAGE_KEYS.settings]: settings });
     await recalculateState({ forceFlush: true, forceSample: true });
-    return buildLiveStatePayload(await getRollingState(), settings, currentState.activeTabId);
+    const [state, domainProfiles] = await Promise.all([getRollingState(), getDomainProfiles()]);
+    return buildLiveStatePayload(state, settings, domainProfiles, currentState.activeTabId);
   }
 
   const resetState = createDefaultRollingState();
   resetState.activeTabId = currentState.activeTabId;
+  resetState.activeDomain = currentState.activeDomain;
 
   await Promise.all([
     chrome.storage.local.set({ [STORAGE_KEYS.settings]: settings }),
@@ -619,7 +1020,7 @@ async function setTrackingEnabled(enabled) {
   ]);
 
   await broadcastLiveState({ settings, state: resetState });
-  return buildLiveStatePayload(resetState, settings, currentState.activeTabId);
+  return buildLiveStatePayload(resetState, settings, await getDomainProfiles(), currentState.activeTabId);
 }
 
 async function recordTabSwitch(tabId) {
@@ -632,12 +1033,22 @@ async function recordTabSwitch(tabId) {
 
   const now = Date.now();
   const state = await getRollingState();
+  const nextDomain = await resolveDomainForTab(tabId);
 
-  if (tabId === state.activeTabId) {
+  if (tabId === state.activeTabId && nextDomain === state.activeDomain) {
     return;
   }
 
+  const previousDomain = state.activeDomain;
   state.activeTabId = tabId;
+  state.activeDomain = nextDomain;
+
+  if (nextDomain && nextDomain !== previousDomain) {
+    recordPendingDomainMetric(state, nextDomain, {
+      visits: 1,
+      lastSeenAt: now
+    });
+  }
 
   if (now - state.lastTabSwitchAt < TAB_SWITCH_COOLDOWN_MS) {
     await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
@@ -648,6 +1059,10 @@ async function recordTabSwitch(tabId) {
   state.lastTabSwitchAt = now;
   state.tabSwitchEvents.push(now);
   state.pendingSummary.tabSwitches += 1;
+  recordPendingDomainMetric(state, nextDomain, {
+    tabSwitches: 1,
+    lastSeenAt: now
+  });
 
   await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
   await recalculateState();
@@ -662,6 +1077,7 @@ async function recordScrollSample(sample) {
   }
 
   const state = await getRollingState();
+  const sourceDomain = normalizeDomain(sample.domain) || state.activeDomain;
 
   state.scrollEvents.push({
     timestamp: Number(sample.timestamp || Date.now()),
@@ -678,6 +1094,12 @@ async function recordScrollSample(sample) {
     state.pendingSummary.directionFlips += Number(sample.directionChanges);
   }
 
+  recordPendingDomainMetric(state, sourceDomain, {
+    scrollBursts: sample.burst ? 1 : 0,
+    directionFlips: sample.directionChanges > 3 ? Number(sample.directionChanges) : 0,
+    lastSeenAt: Number(sample.timestamp || Date.now())
+  });
+
   await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
   await recalculateState();
 }
@@ -693,6 +1115,10 @@ async function recordIdleMinute(now = Date.now()) {
   state.lastIdleMinuteStamp = minuteStamp;
   state.idleMinuteStamps.push(minuteStamp);
   state.pendingSummary.idleMinutes += 1;
+  recordPendingDomainMetric(state, state.activeDomain, {
+    recoveryMinutes: 1,
+    lastSeenAt: now
+  });
 
   await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
 }
@@ -720,12 +1146,34 @@ async function handleIdleStateChanged(newState) {
   await recalculateState({ forceFlush: true, forceSample: true });
 }
 
-async function acknowledgeIntervention(kind) {
-  const state = await getRollingState();
+async function acknowledgeIntervention(kind, tabId) {
+  const [settings, domainProfiles, initialState] = await Promise.all([
+    getSettings(),
+    getDomainProfiles(),
+    getRollingState()
+  ]);
+  const state = syncActiveDomainContext(await ensureActiveContext(initialState), domainProfiles);
   const now = Date.now();
+  const sourceTabId = typeof tabId === "number" ? tabId : state.activeTabId;
+
+  if (sourceTabId && state.activeTabId && sourceTabId !== state.activeTabId) {
+    await broadcastLiveState({ settings, state, domainProfiles });
+    return false;
+  }
+
+  const sourceDomain = sourceTabId ? await resolveDomainForTab(sourceTabId) : state.activeDomain;
 
   if (kind === "shown") {
     state.pendingSummary.interventionsShown += 1;
+    recordPendingDomainMetric(state, sourceDomain, {
+      interventionsShown: 1,
+      lastSeenAt: now
+    });
+  }
+
+  if (sourceTabId === state.activeTabId && sourceDomain !== state.activeDomain) {
+    state.activeDomain = sourceDomain;
+    syncActiveDomainContext(state, domainProfiles);
   }
 
   state.lastInterventionAt = now;
@@ -740,32 +1188,75 @@ async function acknowledgeIntervention(kind) {
     };
   }
 
-  await flushPendingSummary(state, { force: kind === "shown" });
-  await broadcastLiveState();
+  await flushPendingSummary(state, {
+    force: kind === "shown",
+    domainProfiles
+  });
+  await broadcastLiveState({ settings, state, domainProfiles });
+  return true;
 }
 
-async function startBreakSession() {
-  const state = await getRollingState();
+async function startBreakSession(tabId) {
+  const [settings, domainProfiles, initialState] = await Promise.all([
+    getSettings(),
+    getDomainProfiles(),
+    getRollingState()
+  ]);
+  const state = syncActiveDomainContext(await ensureActiveContext(initialState), domainProfiles);
+  const sourceTabId = typeof tabId === "number" ? tabId : state.activeTabId;
+
+  if (sourceTabId && state.activeTabId && sourceTabId !== state.activeTabId) {
+    await broadcastLiveState({ settings, state, domainProfiles });
+    return false;
+  }
+
+  const sourceDomain = sourceTabId ? await resolveDomainForTab(sourceTabId) : state.activeDomain;
   state.pendingSummary.breakSessions += 1;
-  await flushPendingSummary(state, { force: true });
-  await broadcastLiveState();
+  recordPendingDomainMetric(state, sourceDomain, {
+    breakSessions: 1,
+    lastSeenAt: Date.now()
+  });
+
+  if (sourceTabId === state.activeTabId && sourceDomain !== state.activeDomain) {
+    state.activeDomain = sourceDomain;
+    syncActiveDomainContext(state, domainProfiles);
+  }
+
+  await flushPendingSummary(state, {
+    force: true,
+    domainProfiles
+  });
+  await broadcastLiveState({ settings, state, domainProfiles });
+  return true;
 }
 
 async function toggleFocusMode(tabId, enabled) {
-  const settings = await getSettings();
-  const state = await getRollingState();
+  const [settings, domainProfiles, initialState] = await Promise.all([
+    getSettings(),
+    getDomainProfiles(),
+    getRollingState()
+  ]);
+  const state = syncActiveDomainContext(await ensureActiveContext(initialState), domainProfiles);
   const key = String(tabId);
   const nextValue = typeof enabled === "boolean" ? enabled : !state.focusModeTabs[key];
+  const targetDomain = tabId === state.activeTabId ? state.activeDomain : await resolveDomainForTab(tabId);
 
   if (nextValue) {
     state.focusModeTabs[key] = true;
     state.pendingSummary.focusModeUses += 1;
+    recordPendingDomainMetric(state, targetDomain, {
+      focusModeUses: 1,
+      lastSeenAt: Date.now()
+    });
   } else {
     delete state.focusModeTabs[key];
   }
 
-  await flushPendingSummary(state, { force: true });
-  await broadcastLiveState({ settings, state });
+  await flushPendingSummary(state, {
+    force: true,
+    domainProfiles
+  });
+  await broadcastLiveState({ settings, state, domainProfiles });
 
   return Boolean(state.focusModeTabs[key]);
 }
@@ -796,6 +1287,8 @@ async function resetTodaySummary() {
 
   const state = await getRollingState();
   state.pendingSummary = createPendingSummary();
+  state.pendingDomainUpdates = {};
+  state.lastSummaryWriteAt = 0;
   await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
 }
 
@@ -842,6 +1335,53 @@ async function handleMaintenanceAlarm() {
   await recalculateState({ forceFlush: true, forceSample: true });
 }
 
+async function handleTabUpdated(tabId, changeInfo, tab) {
+  if (!changeInfo.url && !tab?.url) {
+    return;
+  }
+
+  await ensureInitialized();
+  const [settings, domainProfiles, initialState] = await Promise.all([
+    getSettings(),
+    getDomainProfiles(),
+    getRollingState()
+  ]);
+  const state = syncActiveDomainContext(await ensureActiveContext(initialState), domainProfiles);
+  const nextDomain = domainFromUrl(changeInfo.url || tab?.url);
+
+  if (tabId !== state.activeTabId) {
+    if (String(tabId) in state.focusModeTabs) {
+      await broadcastLiveState({ settings, state, domainProfiles });
+    }
+
+    return;
+  }
+
+  if (nextDomain === state.activeDomain) {
+    return;
+  }
+
+  state.activeTabId = tabId;
+  state.activeDomain = nextDomain;
+  state.activeDomainContext = null;
+
+  if (settings.trackingEnabled && nextDomain) {
+    recordPendingDomainMetric(state, nextDomain, {
+      visits: 1,
+      lastSeenAt: Date.now()
+    });
+  }
+
+  await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
+
+  if (settings.trackingEnabled) {
+    await recalculateState({ forceFlush: true, forceSample: true });
+    return;
+  }
+
+  await broadcastLiveState({ settings, state, domainProfiles });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   enqueueMutation(async () => {
     await ensureInitialized();
@@ -884,6 +1424,16 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
   });
 });
 
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.url && changeInfo.status !== "complete") {
+    return;
+  }
+
+  enqueueMutation(() => handleTabUpdated(tabId, changeInfo, tab)).catch((error) => {
+    console.error("Cognitive Load Meter tab update handling failed", error);
+  });
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   enqueueMutation(async () => {
     const state = await getRollingState();
@@ -923,7 +1473,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message?.type === "CONTENT_SCROLL_SAMPLE") {
-      await enqueueMutation(() => recordScrollSample(message.payload || {}));
+      await enqueueMutation(() =>
+        recordScrollSample({
+          ...(message.payload || {}),
+          domain: domainFromUrl(sender.tab?.url)
+        })
+      );
       sendResponse({ ok: true });
       return;
     }
@@ -948,20 +1503,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message?.type === "INTERVENTION_SHOWN") {
-      await enqueueMutation(() => acknowledgeIntervention("shown"));
-      sendResponse({ ok: true });
+      const acknowledged = await enqueueMutation(() => acknowledgeIntervention("shown", sender.tab?.id));
+      sendResponse({ ok: acknowledged });
       return;
     }
 
     if (message?.type === "DISMISS_INTERVENTION") {
-      await enqueueMutation(() => acknowledgeIntervention("dismissed"));
-      sendResponse({ ok: true });
+      const acknowledged = await enqueueMutation(() => acknowledgeIntervention("dismissed", sender.tab?.id));
+      sendResponse({ ok: acknowledged });
       return;
     }
 
     if (message?.type === "START_BREAK_SESSION") {
-      await enqueueMutation(() => startBreakSession());
-      sendResponse({ ok: true });
+      const started = await enqueueMutation(() => startBreakSession(sender.tab?.id));
+      sendResponse({ ok: started });
       return;
     }
 
