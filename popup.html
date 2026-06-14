@@ -8,125 +8,20 @@
   </head>
   <body class="popup-body">
     <main class="popup-shell">
-      <header class="popup-topbar">
-        <button class="popup-brand" id="brandTapTarget" type="button" aria-label="Toggle debug drawer">
-          <span class="popup-brand-mark"></span>
-          <span class="popup-brand-copy">
-            <span class="popup-kicker">Cognitive Load Meter</span>
-            <span class="popup-title">Quietly adapt your browsing pace.</span>
-          </span>
-        </button>
+      <button class="popup-state-card popup-start-card" id="welcomeView" type="button" hidden>
+        <span class="popup-state-ring popup-state-ring-off">
+          <span class="popup-state-core"></span>
+        </span>
+        <span class="popup-state-label">Tracking Off</span>
+        <span class="popup-state-note">Tap to start tracking</span>
+      </button>
 
-        <div class="popup-topbar-actions">
-          <button class="popup-icon-button" id="settingsButton" type="button">Settings</button>
-          <button class="popup-toggle" id="trackingToggle" type="button" aria-pressed="false">Tracking Off</button>
+      <section class="popup-state-card" id="dashboardView" hidden aria-live="polite">
+        <div class="popup-state-ring" id="scoreRing" style="--ring-progress: 0deg; --ring-color: #4ade80;">
+          <span class="popup-state-core"></span>
         </div>
-      </header>
-
-      <section class="popup-card popup-card-hero" id="welcomeView" hidden>
-        <p class="popup-chip">Local-Only Tracking</p>
-        <h1 class="popup-heading">Notice overload before it steals your focus.</h1>
-        <p class="popup-copy">
-          Cognitive Load Meter watches lightweight signals like tab switching, scanning, and recovery moments.
-          When your pace gets heavy, it responds with calm, subtle guidance instead of noisy interruptions.
-        </p>
-        <div class="popup-feature-list">
-          <div class="popup-feature-item">Real-time cognitive load score</div>
-          <div class="popup-feature-item">Gentle in-page focus support</div>
-          <div class="popup-feature-item">No page content collected or sent anywhere</div>
-        </div>
-        <button class="popup-button popup-button-primary" id="startTrackingButton" type="button">Start Tracking</button>
-      </section>
-
-      <section class="popup-card popup-card-dashboard" id="dashboardView" hidden>
-        <div class="dashboard-hero">
-          <div class="score-ring" id="scoreRing" style="--ring-progress: 0deg; --ring-color: #22c55e;">
-            <div class="score-ring-core">
-              <span class="score-label">Current</span>
-              <span class="score-value" id="scoreValue">0</span>
-            </div>
-          </div>
-
-          <div class="dashboard-summary">
-            <p class="dashboard-status-kicker">Live Status</p>
-            <h2 class="dashboard-status-title" id="statusValue">Low</h2>
-            <p class="dashboard-status-copy" id="statusDescription">Your browsing rhythm looks steady and manageable.</p>
-            <div class="dashboard-inline-badges">
-              <span class="dashboard-badge">Processed locally</span>
-              <span class="dashboard-badge" id="focusBadge">Focus mode off</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="metrics-grid">
-          <article class="metric-card">
-            <span class="metric-label">Tab switches</span>
-            <strong class="metric-value" id="metricSwitches">0</strong>
-            <span class="metric-caption">Today</span>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">Recovery</span>
-            <strong class="metric-value" id="metricRecovery">0m</strong>
-            <span class="metric-caption">Idle relief</span>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">Breaks</span>
-            <strong class="metric-value" id="metricBreaks">0</strong>
-            <span class="metric-caption">Intentional resets</span>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">Peak</span>
-            <strong class="metric-value" id="metricPeak">0</strong>
-            <span class="metric-caption">Today</span>
-          </article>
-        </div>
-
-        <section class="dashboard-section">
-          <div class="section-heading-row">
-            <h3 class="section-heading">Session Trend</h3>
-            <span class="section-caption">Recent rhythm</span>
-          </div>
-          <div class="trend-card">
-            <canvas class="trend-canvas" id="trendCanvas" width="320" height="92"></canvas>
-          </div>
-        </section>
-
-        <section class="dashboard-section">
-          <div class="section-heading-row">
-            <h3 class="section-heading">Today&apos;s Pattern</h3>
-            <span class="section-caption" id="dateLabel">Today</span>
-          </div>
-          <div class="pattern-bars" id="patternBars" aria-label="Hourly cognitive load pattern"></div>
-        </section>
-
-        <section class="dashboard-section">
-          <div class="section-heading-row">
-            <h3 class="section-heading">Simple Insights</h3>
-            <span class="section-caption">Deterministic</span>
-          </div>
-          <div class="insights-list" id="insightsList"></div>
-        </section>
-
-        <div class="action-row">
-          <button class="popup-button popup-button-secondary" id="focusModeButton" type="button">Focus Current Tab</button>
-          <button class="popup-button popup-button-secondary" id="openOptionsButton" type="button">Open Settings</button>
-          <button class="popup-button popup-button-ghost" id="resetTodayButton" type="button">Reset Today</button>
-        </div>
-      </section>
-
-      <section class="popup-card popup-card-debug" id="debugDrawer" hidden>
-        <div class="section-heading-row">
-          <h3 class="section-heading">Debug Tools</h3>
-          <span class="section-caption">Hidden QA drawer</span>
-        </div>
-        <div class="debug-grid">
-          <button class="popup-button popup-button-secondary" data-debug-mode="low" type="button">Simulate Low</button>
-          <button class="popup-button popup-button-secondary" data-debug-mode="medium" type="button">Simulate Medium</button>
-          <button class="popup-button popup-button-secondary" data-debug-mode="high" type="button">Simulate High</button>
-          <button class="popup-button popup-button-secondary" data-debug-mode="card" type="button">Force Card</button>
-          <button class="popup-button popup-button-ghost" data-debug-mode="clear" type="button">Return to Live</button>
-          <button class="popup-button popup-button-ghost" id="debugResetTodayButton" type="button">Reset Today</button>
-        </div>
+        <p class="popup-state-label" id="statusValue">Calm</p>
+        <p class="popup-state-note" id="statusDescription">Rhythm feels steady</p>
       </section>
     </main>
 

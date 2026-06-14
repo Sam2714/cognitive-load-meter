@@ -345,7 +345,25 @@ function normalizeRollingState(state) {
     ...base,
     ...state,
     tabSwitchEvents: Array.isArray(state?.tabSwitchEvents)
-      ? state.tabSwitchEvents.filter(Boolean).map((value) => Number(value))
+      ? state.tabSwitchEvents
+          .map((value) => {
+            if (Number.isFinite(value)) {
+              return {
+                timestamp: Number(value),
+                domain: null
+              };
+            }
+
+            if (!value || !Number.isFinite(value.timestamp)) {
+              return null;
+            }
+
+            return {
+              timestamp: Number(value.timestamp),
+              domain: normalizeDomain(value.domain)
+            };
+          })
+          .filter(Boolean)
       : [],
     scrollEvents: Array.isArray(state?.scrollEvents)
       ? state.scrollEvents
@@ -354,7 +372,8 @@ function normalizeRollingState(state) {
             timestamp: Number(event.timestamp),
             burst: Boolean(event.burst),
             flips: Number(event.flips || 0),
-            velocity: Number(event.velocity || 0)
+            velocity: Number(event.velocity || 0),
+            domain: normalizeDomain(event.domain)
           }))
       : [],
     idleMinuteStamps: Array.isArray(state?.idleMinuteStamps)
@@ -482,11 +501,20 @@ function pruneDomainProfiles(profiles, limit = 60) {
     }, {});
 }
 
-function countSignals(state) {
+function countSignals(state, options = {}) {
+  const domain = normalizeDomain(options.domain);
+  const filterByDomain = Boolean(domain);
+  const tabSwitchEvents = filterByDomain
+    ? state.tabSwitchEvents.filter((event) => event.domain === domain)
+    : state.tabSwitchEvents;
+  const scrollEvents = filterByDomain
+    ? state.scrollEvents.filter((event) => event.domain === domain)
+    : state.scrollEvents;
+
   return {
-    switches10m: state.tabSwitchEvents.length,
-    bursts5m: state.scrollEvents.reduce((total, event) => total + (event.burst ? 1 : 0), 0),
-    flips5m: state.scrollEvents.reduce((total, event) => total + Number(event.flips || 0), 0),
+    switches10m: tabSwitchEvents.length,
+    bursts5m: scrollEvents.reduce((total, event) => total + (event.burst ? 1 : 0), 0),
+    flips5m: scrollEvents.reduce((total, event) => total + Number(event.flips || 0), 0),
     idleMinutes10m: state.idleMinuteStamps.length
   };
 }
@@ -500,7 +528,7 @@ function isTrackingActive(settings, state) {
 }
 
 function trimRollingState(state, now = Date.now()) {
-  state.tabSwitchEvents = state.tabSwitchEvents.filter((timestamp) => now - timestamp <= TAB_WINDOW_MS);
+  state.tabSwitchEvents = state.tabSwitchEvents.filter((event) => now - event.timestamp <= TAB_WINDOW_MS);
   state.scrollEvents = state.scrollEvents.filter((event) => now - event.timestamp <= SCROLL_WINDOW_MS);
   state.idleMinuteStamps = state.idleMinuteStamps.filter((stamp) => now - stamp <= IDLE_WINDOW_MS);
   state.recentScores = state.recentScores
@@ -857,6 +885,8 @@ async function buildLiveStatePayload(state, settings, domainProfiles, tabReferen
   const trackingActive = isTrackingActive(settings, state);
   const isPrimaryTab = typeof resolvedTabId === "number" && resolvedTabId === state.activeTabId;
   const tabDomain = isPrimaryTab ? state.activeDomain : domainFromUrl(tab?.url);
+  const sessionSignals = countSignals(state);
+  const surfaceSignals = tabDomain ? countSignals(state, { domain: tabDomain }) : sessionSignals;
   const currentDomainProfile = !trackingActive
     ? null
     : isPrimaryTab
@@ -875,7 +905,8 @@ async function buildLiveStatePayload(state, settings, domainProfiles, tabReferen
     lastInterventionAt: state.lastInterventionAt,
     recentScores: state.recentScores,
     sessionStartedAt: state.sessionStartedAt,
-    signalCounts: countSignals(state),
+    signalCounts: sessionSignals,
+    surfaceSignalCounts: surfaceSignals,
     currentDomainProfile,
     uiPreferences: {
       suggestionsEnabled: settings.suggestionsEnabled,
@@ -1034,6 +1065,7 @@ async function recordTabSwitch(tabId) {
   const now = Date.now();
   const state = await getRollingState();
   const nextDomain = await resolveDomainForTab(tabId);
+  const isInitialActivation = state.activeTabId === null && state.lastTabSwitchAt === 0;
 
   if (tabId === state.activeTabId && nextDomain === state.activeDomain) {
     return;
@@ -1050,6 +1082,12 @@ async function recordTabSwitch(tabId) {
     });
   }
 
+  if (isInitialActivation) {
+    await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
+    await broadcastLiveState({ settings, state });
+    return;
+  }
+
   if (now - state.lastTabSwitchAt < TAB_SWITCH_COOLDOWN_MS) {
     await chrome.storage.session.set({ [STORAGE_KEYS.rollingState]: state });
     await broadcastLiveState({ settings, state });
@@ -1057,7 +1095,10 @@ async function recordTabSwitch(tabId) {
   }
 
   state.lastTabSwitchAt = now;
-  state.tabSwitchEvents.push(now);
+  state.tabSwitchEvents.push({
+    timestamp: now,
+    domain: nextDomain
+  });
   state.pendingSummary.tabSwitches += 1;
   recordPendingDomainMetric(state, nextDomain, {
     tabSwitches: 1,
@@ -1083,7 +1124,8 @@ async function recordScrollSample(sample) {
     timestamp: Number(sample.timestamp || Date.now()),
     burst: Boolean(sample.burst),
     flips: Number(sample.directionChanges > 3 ? sample.directionChanges : 0),
-    velocity: Number(sample.velocity || 0)
+    velocity: Number(sample.velocity || 0),
+    domain: sourceDomain
   });
 
   if (sample.burst) {

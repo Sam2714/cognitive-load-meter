@@ -69,6 +69,12 @@
         flips5m: 0,
         idleMinutes10m: 0
       },
+      surfaceSignalCounts: {
+        switches10m: 0,
+        bursts5m: 0,
+        flips5m: 0,
+        idleMinutes10m: 0
+      },
       uiPreferences: {
         suggestionsEnabled: true,
         interventionThreshold: 70,
@@ -97,14 +103,14 @@
 
   function statusDescription(status) {
     if (status === "High") {
-      return "Your pace looks dense right now. A quick reset may help.";
+      return "Recent session load is elevated right now.";
     }
 
     if (status === "Medium") {
-      return "Some friction is building. Staying on one thread may help.";
+      return "Recent session friction is starting to build.";
     }
 
-    return "Your browsing rhythm looks steady and manageable.";
+    return "Recent session pace looks steady.";
   }
 
   function ensureUi() {
@@ -151,23 +157,23 @@
         <section class="clm-panel" hidden>
           <div class="clm-panel-header">
             <div>
-              <p class="clm-card-kicker">Live Snapshot</p>
+              <p class="clm-card-kicker">Recent Activity</p>
               <h3 class="clm-panel-title">Low load</h3>
             </div>
             <div class="clm-panel-score">0</div>
           </div>
-          <p class="clm-panel-body">Your browsing rhythm looks steady and manageable.</p>
+          <p class="clm-panel-body">Recent session pace looks steady.</p>
           <div class="clm-panel-signals">
             <div class="clm-panel-signal">
-              <span>Switches</span>
+              <span>Site switches 10m</span>
               <strong data-signal="switches">0</strong>
             </div>
             <div class="clm-panel-signal">
-              <span>Scan bursts</span>
+              <span>Site bursts 5m</span>
               <strong data-signal="bursts">0</strong>
             </div>
             <div class="clm-panel-signal">
-              <span>Recovery</span>
+              <span>Recovery 10m</span>
               <strong data-signal="idle">0m</strong>
             </div>
           </div>
@@ -531,7 +537,7 @@
     state.widget.style.setProperty("--clm-accent", color);
     state.widgetScore.textContent = String(score);
     state.widgetStatus.textContent = state.live.status;
-    state.widget.title = `${state.live.status} load. ${statusDescription(state.live.status)}`;
+    state.widget.title = `${state.live.status} load based on your recent session.`;
     state.widget.classList.toggle("is-alert", state.live.status === "High");
   }
 
@@ -540,19 +546,20 @@
       return;
     }
 
-    const signals = state.live.signalCounts || {
+    const sessionSignals = state.live.signalCounts || {
       switches10m: 0,
       bursts5m: 0,
       idleMinutes10m: 0
     };
+    const surfaceSignals = state.live.surfaceSignalCounts || sessionSignals;
 
     state.panelTitle.textContent = `${state.live.status} load`;
     state.panelBody.textContent = statusDescription(state.live.status);
     state.panelScore.textContent = String(clamp(Math.round(state.live.score || 0), 0, 100));
     state.panelFocusButton.textContent = state.live.focusModeActive ? "Turn off focus" : "Focus mode";
-    state.panelSignals.querySelector('[data-signal="switches"]').textContent = String(signals.switches10m || 0);
-    state.panelSignals.querySelector('[data-signal="bursts"]').textContent = String(signals.bursts5m || 0);
-    state.panelSignals.querySelector('[data-signal="idle"]').textContent = `${signals.idleMinutes10m || 0}m`;
+    state.panelSignals.querySelector('[data-signal="switches"]').textContent = String(surfaceSignals.switches10m || 0);
+    state.panelSignals.querySelector('[data-signal="bursts"]').textContent = String(surfaceSignals.bursts5m || 0);
+    state.panelSignals.querySelector('[data-signal="idle"]').textContent = `${sessionSignals.idleMinutes10m || 0}m`;
   }
 
   function renderSuggestion() {
@@ -706,6 +713,10 @@
       signalCounts: {
         ...state.live.signalCounts,
         ...(payload.signalCounts || {})
+      },
+      surfaceSignalCounts: {
+        ...state.live.surfaceSignalCounts,
+        ...(payload.surfaceSignalCounts || {})
       },
       uiPreferences: {
         ...state.live.uiPreferences,
